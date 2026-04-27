@@ -49,15 +49,16 @@ public final class LoadTestOrchestrator {
     private static void runSuite() throws Exception {
         final String label = System.getProperty("benchmark.label", "unnamed");
         final int iterations = Integer.getInteger("benchmark.iterations", 5);
-        final String serverClasspath = buildClasspath();
+        final String serverClasspath = System.getProperty("benchmark.serverClasspath", buildClasspath());
         final File buildDir = new File("benchmarks/target");
-        final File reportDir = new File(buildDir, "reports");
+
+        final File reportDir = new File(buildDir, "reports/staging/" + label);
         final Path resultsDir = Path.of("benchmarks/results");
+
+        final EnvironmentInfo env = EnvironmentInfo.capture();
 
         System.err.println("=== Benchmark Suite: " + label + " ===");
         System.err.println("Iterations: " + iterations);
-
-        final EnvironmentInfo env = EnvironmentInfo.capture();
         System.err.println("Environment: " + env.jvmVersion() + " / " + env.osName() +
                 " / " + env.cpuModel());
 
@@ -77,17 +78,19 @@ public final class LoadTestOrchestrator {
         final ResultStore store = new ResultStore(resultsDir);
         store.save(suiteResult, label);
 
-        if (!"baseline".equals(label) && store.hasLabel("baseline")) {
-            final SuiteResult baseline = store.loadBaseline();
-            final String deltaReport = DeltaReportGenerator.generateConsoleReport(baseline, suiteResult);
+        if (store.hasPromotedResults()) {
+            final SuiteResult previous = store.loadLatestPromoted();
+            System.err.println("\nComparing against previous run: " +
+                    previous.label() + " (commit " + previous.gitCommit() + ")");
+            final String deltaReport = DeltaReportGenerator.generateConsoleReport(previous, suiteResult);
             System.err.println(deltaReport);
 
-            final File htmlFile = new File(reportDir, label + "-vs-baseline.html");
-            DeltaReportGenerator.generateHtmlReport(htmlFile, baseline, suiteResult);
+            final File htmlFile = new File(reportDir, label + "-vs-previous.html");
+            DeltaReportGenerator.generateHtmlReport(htmlFile, previous, suiteResult);
             System.err.println("HTML report: " + htmlFile);
 
             final RegressionDetector detector = new RegressionDetector();
-            final RegressionDetector.Verdict verdict = detector.evaluate(baseline, suiteResult);
+            final RegressionDetector.Verdict verdict = detector.evaluate(previous, suiteResult);
             System.err.println(verdict.formatSummary());
 
             if (!verdict.passed()) {
@@ -116,7 +119,10 @@ public final class LoadTestOrchestrator {
         final String deltaReport = DeltaReportGenerator.generateConsoleReport(baseline, candidate);
         System.err.println(deltaReport);
 
-        final File reportDir = new File("benchmarks/target/reports");
+        final String candidateShaShort = candidate.gitCommit().length() > 7
+                ? candidate.gitCommit().substring(0, 7) : candidate.gitCommit();
+        final File reportDir = new File("benchmarks/target/reports/" +
+                candidateShaShort + "/" + candidateLabel);
         reportDir.mkdirs();
         final File htmlFile = new File(reportDir, candidateLabel + "-vs-" + baselineLabel + ".html");
         DeltaReportGenerator.generateHtmlReport(htmlFile, baseline, candidate);

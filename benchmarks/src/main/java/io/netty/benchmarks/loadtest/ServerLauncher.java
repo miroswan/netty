@@ -17,7 +17,6 @@ package io.netty.benchmarks.loadtest;
 
 import java.io.File;
 import java.io.IOException;
-import java.net.ServerSocket;
 import java.nio.file.Files;
 import java.util.ArrayList;
 import java.util.List;
@@ -30,23 +29,16 @@ final class ServerLauncher {
         this.config = config;
     }
 
-    Process startServer(final File portFile, final int jmxPort) throws IOException {
+    Process startServer(final File portFile) throws IOException {
         final List<String> command = new ArrayList<>();
         command.add(System.getProperty("java.home") + "/bin/java");
 
         command.add("-XX:NativeMemoryTracking=summary");
 
-        final File jfrFile = new File(config.reportDir(), config.name() + "-alloc.jfr");
         final long warmupDelaySeconds = config.warmupTimeMs() / 1000;
         command.add("-XX:StartFlightRecording=delay=" + warmupDelaySeconds +
-                "s,duration=60s,filename=" + jfrFile.getAbsolutePath() + ",settings=profile");
-
-        command.add("-Dcom.sun.management.jmxremote");
-        command.add("-Dcom.sun.management.jmxremote.port=" + jmxPort);
-        command.add("-Dcom.sun.management.jmxremote.authenticate=false");
-        command.add("-Dcom.sun.management.jmxremote.ssl=false");
-        command.add("-Dcom.sun.management.jmxremote.local.only=true");
-        command.add("-Djava.rmi.server.hostname=127.0.0.1");
+                "s,disk=true,dumponexit=true,filename=" + getJfrFile().getAbsolutePath() +
+                ",settings=profile");
 
         command.add("-cp");
         command.add(config.serverClasspath());
@@ -67,6 +59,10 @@ final class ServerLauncher {
         return pb.start();
     }
 
+    File getJfrFile() {
+        return new File(config.reportDir(), config.name() + "-alloc.jfr");
+    }
+
     int readServerPort(final File portFile) throws Exception {
         final long startTime = System.currentTimeMillis();
         final long timeout = 5000;
@@ -80,14 +76,6 @@ final class ServerLauncher {
         }
 
         throw new RuntimeException("Server did not write port file within " + timeout + "ms");
-    }
-
-    int findFreePort() {
-        try (ServerSocket socket = new ServerSocket(0)) {
-            return socket.getLocalPort();
-        } catch (final IOException e) {
-            throw new RuntimeException("Failed to find free port", e);
-        }
     }
 
     void captureHeapDump(final Process serverProcess, final File reportDir, final String name) {
@@ -114,6 +102,20 @@ final class ServerLauncher {
             }
         } catch (final Exception e) {
             System.err.println("Warning: Failed to capture heap dump: " + e.getMessage());
+        }
+    }
+
+    static void triggerGC(final long pid) throws IOException, InterruptedException {
+        final ProcessBuilder pb = new ProcessBuilder(
+                System.getProperty("java.home") + "/bin/jcmd",
+                String.valueOf(pid),
+                "GC.run"
+        );
+        pb.inheritIO();
+        final Process process = pb.start();
+        final int exitCode = process.waitFor();
+        if (exitCode != 0) {
+            System.err.println("Warning: jcmd GC.run failed with exit code " + exitCode);
         }
     }
 

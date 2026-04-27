@@ -58,50 +58,123 @@ final class ResultStore {
     }
 
     void save(final SuiteResult result, final String label) throws IOException {
-        final Path labelDir = resultsDir.resolve(label);
-        Files.createDirectories(labelDir);
+        final Path stagingDir = resultsDir.resolve("staging").resolve(label);
+        Files.createDirectories(stagingDir);
 
         final String timestamp = TIMESTAMP_FORMAT.format(result.timestamp());
-        final String gitShort = result.gitCommit().length() > 7
-                ? result.gitCommit().substring(0, 7)
-                : result.gitCommit();
-        final String filename = timestamp + "_" + gitShort + ".json";
+        final String filename = timestamp + ".json";
 
-        final Path file = labelDir.resolve(filename);
+        final Path file = stagingDir.resolve(filename);
         Files.writeString(file, GSON.toJson(result));
         System.err.println("Results saved to: " + file);
     }
 
     SuiteResult load(final String label) throws IOException {
-        final Path labelDir = resultsDir.resolve(label);
-        if (!Files.isDirectory(labelDir)) {
-            throw new IOException("No results found for label: " + label);
+        final Path mostRecent = findMostRecentResult(label);
+        final String json = Files.readString(mostRecent);
+        return GSON.fromJson(json, SuiteResult.class);
+    }
+
+    SuiteResult load(final String sha, final String label) throws IOException {
+        final Path shaLabelDir = resultsDir.resolve(sha).resolve(label);
+        if (!Files.isDirectory(shaLabelDir)) {
+            throw new IOException("No results found for sha=" + sha + ", label=" + label);
         }
 
-        try (Stream<Path> files = Files.list(labelDir)) {
+        try (Stream<Path> files = Files.list(shaLabelDir)) {
             final Path mostRecent = files
                     .filter(p -> p.toString().endsWith(".json"))
                     .max(Comparator.comparing(p -> p.getFileName().toString()))
-                    .orElseThrow(() -> new IOException("No result files in: " + labelDir));
+                    .orElseThrow(() -> new IOException("No result files in: " + shaLabelDir));
 
             final String json = Files.readString(mostRecent);
             return GSON.fromJson(json, SuiteResult.class);
         }
     }
 
-    SuiteResult loadBaseline() throws IOException {
-        return load("baseline");
-    }
-
     boolean hasLabel(final String label) {
-        final Path labelDir = resultsDir.resolve(label);
-        if (!Files.isDirectory(labelDir)) {
-            return false;
-        }
-        try (Stream<Path> files = Files.list(labelDir)) {
-            return files.anyMatch(p -> p.toString().endsWith(".json"));
+        try {
+            findMostRecentResult(label);
+            return true;
         } catch (final IOException e) {
             return false;
         }
+    }
+
+    SuiteResult loadLatestPromoted() throws IOException {
+        if (!Files.isDirectory(resultsDir)) {
+            throw new IOException("No results directory: " + resultsDir);
+        }
+
+        Path mostRecent = null;
+        try (Stream<Path> shaDirs = Files.list(resultsDir)) {
+            for (final Path shaDir : shaDirs.filter(Files::isDirectory).toList()) {
+                if ("staging".equals(shaDir.getFileName().toString())) {
+                    continue;
+                }
+                try (Stream<Path> labelDirs = Files.list(shaDir)) {
+                    for (final Path labelDir : labelDirs.filter(Files::isDirectory).toList()) {
+                        try (Stream<Path> files = Files.list(labelDir)) {
+                            final Path candidate = files
+                                    .filter(p -> p.toString().endsWith(".json"))
+                                    .max(Comparator.comparing(p -> p.getFileName().toString()))
+                                    .orElse(null);
+                            if (candidate != null && (mostRecent == null
+                                    || candidate.getFileName().toString()
+                                            .compareTo(mostRecent.getFileName().toString()) > 0)) {
+                                mostRecent = candidate;
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        if (mostRecent == null) {
+            throw new IOException("No promoted results found");
+        }
+        final String json = Files.readString(mostRecent);
+        return GSON.fromJson(json, SuiteResult.class);
+    }
+
+    boolean hasPromotedResults() {
+        try {
+            loadLatestPromoted();
+            return true;
+        } catch (final IOException e) {
+            return false;
+        }
+    }
+
+    private Path findMostRecentResult(final String label) throws IOException {
+        if (!Files.isDirectory(resultsDir)) {
+            throw new IOException("No results directory: " + resultsDir);
+        }
+
+        Path mostRecent = null;
+        try (Stream<Path> shaDirs = Files.list(resultsDir)) {
+            for (final Path shaDir : shaDirs.filter(Files::isDirectory).toList()) {
+                final Path labelDir = shaDir.resolve(label);
+                if (!Files.isDirectory(labelDir)) {
+                    continue;
+                }
+                try (Stream<Path> files = Files.list(labelDir)) {
+                    final Path candidate = files
+                            .filter(p -> p.toString().endsWith(".json"))
+                            .max(Comparator.comparing(p -> p.getFileName().toString()))
+                            .orElse(null);
+                    if (candidate != null && (mostRecent == null
+                            || candidate.getFileName().toString()
+                                    .compareTo(mostRecent.getFileName().toString()) > 0)) {
+                        mostRecent = candidate;
+                    }
+                }
+            }
+        }
+
+        if (mostRecent == null) {
+            throw new IOException("No results found for label: " + label);
+        }
+        return mostRecent;
     }
 }

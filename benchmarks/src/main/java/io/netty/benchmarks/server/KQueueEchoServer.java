@@ -52,6 +52,7 @@ public final class KQueueEchoServer {
             b.group(group)
              .channel(KQueueServerSocketChannel.class)
              .option(ChannelOption.SO_BACKLOG, maxConnections)
+             .option(ChannelOption.SO_REUSEADDR, true)
              .childHandler(new ChannelInitializer<SocketChannel>() {
                  @Override
                  public void initChannel(SocketChannel ch) {

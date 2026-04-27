@@ -86,7 +86,8 @@ final class NativeMemoryTracker {
                 System.getProperty("java.home") + "/bin/jcmd",
                 String.valueOf(pid),
                 "VM.native_memory",
-                "summary"
+                "summary",
+                "scale=KB"
         );
 
         final Process process = pb.start();

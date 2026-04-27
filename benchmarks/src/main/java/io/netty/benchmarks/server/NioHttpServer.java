@@ -54,6 +54,7 @@ public final class NioHttpServer {
     }
 
     private static final byte[] CONTENT = "Hello World".getBytes();
+    private static final HelloWorldHandler HANDLER = new HelloWorldHandler();
 
     public static void main(String[] args) throws Exception {
         if (args.length < 3) {
@@ -71,12 +72,13 @@ public final class NioHttpServer {
             b.group(group)
              .channel(NioServerSocketChannel.class)
              .option(ChannelOption.SO_BACKLOG, maxConnections)
+             .option(ChannelOption.SO_REUSEADDR, true)
              .childHandler(new ChannelInitializer<SocketChannel>() {
                  @Override
                  public void initChannel(SocketChannel ch) {
                      ch.pipeline()
                        .addLast(new HttpServerCodec())
-                       .addLast(new HelloWorldHandler());
+                       .addLast(HANDLER);
                  }
              });
 
@@ -96,6 +98,11 @@ public final class NioHttpServer {
     }
 
     private static final class HelloWorldHandler extends SimpleChannelInboundHandler<HttpObject> {
+
+        @Override
+        public boolean isSharable() {
+            return true;
+        }
 
         @Override
         public void channelReadComplete(ChannelHandlerContext ctx) {

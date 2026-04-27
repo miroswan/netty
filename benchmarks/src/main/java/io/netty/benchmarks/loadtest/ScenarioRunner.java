@@ -65,27 +65,19 @@ final class ScenarioRunner {
         portFile.getParentFile().mkdirs();
         portFile.delete();
 
-        final int jmxPort = launcher.findFreePort();
-        final Process serverProcess = launcher.startServer(portFile, jmxPort);
-
-        MemoryStatsCollector memoryCollector = null;
+        final Process serverProcess = launcher.startServer(portFile);
         NativeMemoryTracker nativeTracker = null;
 
         try {
             final int actualPort = launcher.readServerPort(portFile);
             System.err.println("Server started on port " + actualPort +
-                    " (JMX on " + jmxPort + ", PID " + serverProcess.pid() + ")");
+                    " (PID " + serverProcess.pid() + ")");
 
             Thread.sleep(scenario.warmupTimeMs());
 
-            memoryCollector = new MemoryStatsCollector(jmxPort);
-            try {
-                memoryCollector.connect();
-                memoryCollector.startCollecting();
-            } catch (final Exception e) {
-                System.err.println("Warning: JMX monitoring unavailable: " + e.getMessage());
-                memoryCollector = null;
-            }
+            System.err.println("Triggering pre-measurement GC on server PID " + serverProcess.pid());
+            ServerLauncher.triggerGC(serverProcess.pid());
+            Thread.sleep(2000);
 
             nativeTracker = new NativeMemoryTracker(serverProcess.pid());
             try {
@@ -102,19 +94,11 @@ final class ScenarioRunner {
             final FortioRunner fortio = new FortioRunner(fortioConfig);
             final FortioRunner.FortioResult loadResult = fortio.run(actualPort);
 
-            final MemoryStatsCollector.MemoryStats memoryStats;
-            if (memoryCollector != null) {
-                memoryCollector.stopCollecting();
-                memoryStats = memoryCollector.getStats();
-            } else {
-                memoryStats = MemoryStatsCollector.MemoryStats.EMPTY;
-            }
-
             NativeMemoryTracker.LeakDetectionResult leakResult = null;
             if (nativeTracker != null) {
                 try {
                     Thread.sleep(5000);
-                    System.gc();
+                    ServerLauncher.triggerGC(serverProcess.pid());
                     Thread.sleep(1000);
                     leakResult = nativeTracker.detectLeaks("after cooldown");
                     System.err.println(leakResult.formatSummary());
@@ -123,17 +107,36 @@ final class ScenarioRunner {
                 }
             }
 
+            serverProcess.destroy();
+            serverProcess.waitFor(10, TimeUnit.SECONDS);
+            if (serverProcess.isAlive()) {
+                serverProcess.destroyForcibly();
+                serverProcess.waitFor(5, TimeUnit.SECONDS);
+            }
+
+            final MemoryStatsCollector.MemoryStats memoryStats = parseJfrSafely(
+                    launcher.getJfrFile().toPath());
+
             return new BenchmarkResult(iteration, Instant.now(), loadResult, memoryStats, leakResult);
         } finally {
-            if (memoryCollector != null) {
-                memoryCollector.disconnect();
-            }
-            serverProcess.destroy();
-            serverProcess.waitFor(5, TimeUnit.SECONDS);
             if (serverProcess.isAlive()) {
                 serverProcess.destroyForcibly();
             }
             portFile.delete();
+        }
+    }
+
+    private MemoryStatsCollector.MemoryStats parseJfrSafely(final java.nio.file.Path jfrFile) {
+        try {
+            if (!java.nio.file.Files.exists(jfrFile)) {
+                System.err.println("Warning: JFR file not found: " + jfrFile);
+                return MemoryStatsCollector.MemoryStats.EMPTY;
+            }
+            final MemoryStatsCollector collector = new MemoryStatsCollector(jfrFile);
+            return collector.parseStats();
+        } catch (final Exception e) {
+            System.err.println("Warning: JFR parsing failed: " + e.getMessage());
+            return MemoryStatsCollector.MemoryStats.EMPTY;
         }
     }
 
