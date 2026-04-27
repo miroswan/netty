@@ -55,3 +55,6 @@ mainframer
 # exclude file created by the flatten plugin
 .flattened-pom.xml
 .java-version
+
+# Local env
+.local

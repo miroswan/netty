@@ -545,6 +545,7 @@
     <module>testsuite-native-image-client-runtime-init</module>
     <module>transport-blockhound-tests</module>
     <module>microbench</module>
+    <module>benchmarks</module>
     <module>bom</module>
   </modules>
 
@@ -1145,7 +1146,7 @@
       </plugin>
       <plugin>
         <artifactId>maven-checkstyle-plugin</artifactId>
-        <version>3.1.0</version>
+        <version>3.6.0</version>
         <executions>
           <execution>
             <id>check-style</id>
@@ -1188,7 +1189,7 @@
           <dependency>
             <groupId>com.puppycrawl.tools</groupId>
             <artifactId>checkstyle</artifactId>
-            <version>8.29</version>
+            <version>10.21.4</version>
           </dependency>
           <dependency>
             <groupId>${project.groupId}</groupId>
