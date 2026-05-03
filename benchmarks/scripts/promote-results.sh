@@ -9,7 +9,7 @@
 set -euo pipefail
 
 readonly LOG_PREFIX="promote"
-source "$(dirname "$0")/logging.sh"
+source "$(git rev-parse --show-toplevel)/scripts/lib/logging.sh"
 
 readonly RESULTS_DIR="benchmarks/results"
 readonly STAGING_DIR="$RESULTS_DIR/staging"

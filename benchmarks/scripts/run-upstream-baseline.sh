@@ -9,7 +9,7 @@
 set -euo pipefail
 
 readonly LOG_PREFIX="upstream-baseline"
-source "$(dirname "$0")/logging.sh"
+source "$(git rev-parse --show-toplevel)/scripts/lib/logging.sh"
 
 readonly UPSTREAM_BRANCH="${1:-5.0}"
 readonly UPSTREAM_REF="upstream/$UPSTREAM_BRANCH"

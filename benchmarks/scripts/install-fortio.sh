@@ -2,7 +2,7 @@
 set -euo pipefail
 
 readonly LOG_PREFIX="install-fortio"
-source "$(dirname "$0")/logging.sh"
+source "$(git rev-parse --show-toplevel)/scripts/lib/logging.sh"
 
 if command -v fortio &> /dev/null; then
   log_info "Fortio already installed: $(fortio version)"

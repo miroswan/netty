@@ -1,9 +1,10 @@
 #!/usr/bin/env bash
 #
-# Logging utilities for benchmark scripts.
+# Logging utilities for shell scripts.
 #
 # Usage:
-#   source "$(dirname "$0")/logging.sh"
+#   readonly LOG_PREFIX="my-script"
+#   source "$(git rev-parse --show-toplevel)/scripts/lib/logging.sh"
 #
 #   log_info "Starting build"
 #   log_warn "Skipping optional step"
@@ -11,7 +12,7 @@
 #   log_fatal "Cannot continue"  # prints and exits 1
 #
 
-: "${LOG_PREFIX:=benchmark}"
+: "${LOG_PREFIX:=script}"
 
 readonly _BOLD_WHITE="\033[1;37m"
 readonly _BOLD_YELLOW="\033[1;33m"
