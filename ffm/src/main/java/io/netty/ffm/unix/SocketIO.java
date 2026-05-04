@@ -61,10 +61,10 @@ public final class SocketIO {
     /**
      * Returns {@code true} if the packed connect result indicates the connection completed.
      *
-     * @param packed a bit-packed result from {@link #connect}
+     * @param packedResultAndErrno a bit-packed result from {@link #connect}
      * @return {@code true} if the socket is now connected
      */
-    public static boolean connectIsConnected(final long packed) {
+    public static boolean connectIsConnected(final long packedResultAndErrno) {
         return ErrnoState.unpackResult(packed) == 0;
     }
 
@@ -72,10 +72,10 @@ public final class SocketIO {
      * Returns {@code true} if the packed connect result indicates a non-blocking connection
      * is in progress ({@code EINPROGRESS}).
      *
-     * @param packed a bit-packed result from {@link #connect}
+     * @param packedResultAndErrno a bit-packed result from {@link #connect}
      * @return {@code true} if the connection is pending and the caller should wait for writability
      */
-    public static boolean connectIsInProgress(final long packed) {
+    public static boolean connectIsInProgress(final long packedResultAndErrno) {
         return ErrnoState.unpackResult(packed) < 0
                 && ErrnoState.unpackErrno(packed) == Errno.EINPROGRESS();
     }
@@ -84,10 +84,10 @@ public final class SocketIO {
      * Returns {@code true} if the packed connect result indicates the call was interrupted
      * by a signal ({@code EINTR}) and should be retried.
      *
-     * @param packed a bit-packed result from {@link #connect}
+     * @param packedResultAndErrno a bit-packed result from {@link #connect}
      * @return {@code true} if the call should be retried immediately
      */
-    public static boolean connectIsInterrupted(final long packed) {
+    public static boolean connectIsInterrupted(final long packedResultAndErrno) {
         return ErrnoState.unpackResult(packed) < 0
                 && ErrnoState.unpackErrno(packed) == Errno.EINTR();
     }
@@ -96,10 +96,10 @@ public final class SocketIO {
      * Returns {@code true} if the packed accept result indicates the operation would block
      * ({@code EAGAIN} or {@code EWOULDBLOCK}).
      *
-     * @param packed a bit-packed result from {@link #accept}
+     * @param packedResultAndErrno a bit-packed result from {@link #accept}
      * @return {@code true} if no connections are pending
      */
-    public static boolean acceptWouldBlock(final long packed) {
+    public static boolean acceptWouldBlock(final long packedResultAndErrno) {
         final int errno = ErrnoState.unpackErrno(packed);
         return ErrnoState.unpackResult(packed) < 0
                 && (errno == Errno.EAGAIN() || errno == Errno.EWOULDBLOCK());
@@ -109,10 +109,10 @@ public final class SocketIO {
      * Returns {@code true} if the packed accept result indicates the call was interrupted
      * by a signal ({@code EINTR}) and should be retried.
      *
-     * @param packed a bit-packed result from {@link #accept}
+     * @param packedResultAndErrno a bit-packed result from {@link #accept}
      * @return {@code true} if the call should be retried immediately
      */
-    public static boolean acceptIsInterrupted(final long packed) {
+    public static boolean acceptIsInterrupted(final long packedResultAndErrno) {
         return ErrnoState.unpackResult(packed) < 0
                 && ErrnoState.unpackErrno(packed) == Errno.EINTR();
     }
@@ -120,10 +120,10 @@ public final class SocketIO {
     /**
      * Returns {@code true} if the packed accept result contains a valid new socket fd.
      *
-     * @param packed a bit-packed result from {@link #accept}
+     * @param packedResultAndErrno a bit-packed result from {@link #accept}
      * @return {@code true} if a connection was successfully accepted
      */
-    public static boolean acceptIsSuccess(final long packed) {
+    public static boolean acceptIsSuccess(final long packedResultAndErrno) {
         return ErrnoState.unpackResult(packed) >= 0;
     }
 
@@ -131,10 +131,10 @@ public final class SocketIO {
      * Returns {@code true} if the packed sendto result indicates the operation would block
      * ({@code EAGAIN} or {@code EWOULDBLOCK}).
      *
-     * @param packed a bit-packed result from {@link #sendto}
+     * @param packedResultAndErrno a bit-packed result from {@link #sendto}
      * @return {@code true} if the caller should retry when the fd becomes writable
      */
-    public static boolean sendWouldBlock(final long packed) {
+    public static boolean sendWouldBlock(final long packedResultAndErrno) {
         final int errno = ErrnoState.unpackErrno(packed);
         return ErrnoState.unpackResult(packed) < 0
                 && (errno == Errno.EAGAIN() || errno == Errno.EWOULDBLOCK());
@@ -144,10 +144,10 @@ public final class SocketIO {
      * Returns {@code true} if the packed recvfrom result indicates the operation would block
      * ({@code EAGAIN} or {@code EWOULDBLOCK}).
      *
-     * @param packed a bit-packed result from {@link #recvfrom}
+     * @param packedResultAndErrno a bit-packed result from {@link #recvfrom}
      * @return {@code true} if the caller should retry when the fd becomes readable
      */
-    public static boolean recvWouldBlock(final long packed) {
+    public static boolean recvWouldBlock(final long packedResultAndErrno) {
         final int errno = ErrnoState.unpackErrno(packed);
         return ErrnoState.unpackResult(packed) < 0
                 && (errno == Errno.EAGAIN() || errno == Errno.EWOULDBLOCK());
@@ -156,10 +156,10 @@ public final class SocketIO {
     /**
      * Returns {@code true} if the packed recvfrom result indicates end-of-file.
      *
-     * @param packed a bit-packed result from {@link #recvfrom}
+     * @param packedResultAndErrno a bit-packed result from {@link #recvfrom}
      * @return {@code true} if the peer closed the connection
      */
-    public static boolean recvIsEof(final long packed) {
+    public static boolean recvIsEof(final long packedResultAndErrno) {
         return ErrnoState.unpackResult(packed) == 0;
     }
 

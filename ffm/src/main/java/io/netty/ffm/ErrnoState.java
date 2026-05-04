@@ -71,20 +71,20 @@ public final class ErrnoState {
     /**
      * Extracts the syscall return value from a packed {@code long}.
      *
-     * @param packed a value returned by {@link #pack}
+     * @param packedResultAndErrno a value returned by {@link #pack}
      * @return the syscall result as a signed 32-bit integer
      */
-    public static int unpackResult(final long packed) {
+    public static int unpackResult(final long packedResultAndErrno) {
         return (int) (packed >>> 32);
     }
 
     /**
      * Extracts the errno value from a packed {@code long}.
      *
-     * @param packed a value returned by {@link #pack}
+     * @param packedResultAndErrno a value returned by {@link #pack}
      * @return the errno value
      */
-    public static int unpackErrno(final long packed) {
+    public static int unpackErrno(final long packedResultAndErrno) {
         return (int) packed;
     }
 }

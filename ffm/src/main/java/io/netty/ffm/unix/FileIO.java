@@ -60,10 +60,10 @@ public final class FileIO {
      * Returns {@code true} if the packed result indicates the operation would block
      * ({@code EAGAIN} or {@code EWOULDBLOCK}).
      *
-     * @param packed a bit-packed result from any I/O method in this class
+     * @param packedResultAndErrno a bit-packed result from any I/O method in this class
      * @return {@code true} if the caller should retry when the fd becomes ready
      */
-    public static boolean wouldBlock(final long packed) {
+    public static boolean wouldBlock(final long packedResultAndErrno) {
         final int errno = ErrnoState.unpackErrno(packed);
         return ErrnoState.unpackResult(packed) < 0
                 && (errno == Errno.EAGAIN() || errno == Errno.EWOULDBLOCK());
@@ -72,10 +72,10 @@ public final class FileIO {
     /**
      * Returns {@code true} if the packed result indicates end-of-file (zero bytes read).
      *
-     * @param packed a bit-packed result from {@link #read} or {@link #readv}
+     * @param packedResultAndErrno a bit-packed result from {@link #read} or {@link #readv}
      * @return {@code true} if the peer closed the connection
      */
-    public static boolean isEof(final long packed) {
+    public static boolean isEof(final long packedResultAndErrno) {
         return ErrnoState.unpackResult(packed) == 0;
     }
 
@@ -83,10 +83,10 @@ public final class FileIO {
      * Returns {@code true} if the packed result indicates the call was interrupted by a
      * signal ({@code EINTR}) and should be retried.
      *
-     * @param packed a bit-packed result from any I/O method in this class
+     * @param packedResultAndErrno a bit-packed result from any I/O method in this class
      * @return {@code true} if the call should be retried immediately
      */
-    public static boolean isInterrupted(final long packed) {
+    public static boolean isInterrupted(final long packedResultAndErrno) {
         return ErrnoState.unpackResult(packed) < 0 && ErrnoState.unpackErrno(packed) == Errno.EINTR();
     }
 

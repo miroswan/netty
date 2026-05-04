@@ -91,10 +91,10 @@ public final class KqueueIO {
      * Returns {@code true} if the packed kevent result indicates the call was interrupted
      * by a signal ({@code EINTR}) and should be retried.
      *
-     * @param packed a bit-packed result from {@link #kevent}
+     * @param packedResultAndErrno a bit-packed result from {@link #kevent}
      * @return {@code true} if the call should be retried immediately
      */
-    public static boolean isInterrupted(final long packed) {
+    public static boolean isInterrupted(final long packedResultAndErrno) {
         return ErrnoState.unpackResult(packed) < 0
                 && ErrnoState.unpackErrno(packed) == Errno.EINTR();
     }
@@ -102,10 +102,10 @@ public final class KqueueIO {
     /**
      * Returns {@code true} if the packed kevent result indicates a non-retriable error.
      *
-     * @param packed a bit-packed result from {@link #kevent}
+     * @param packedResultAndErrno a bit-packed result from {@link #kevent}
      * @return {@code true} if the call failed with a fatal error
      */
-    public static boolean isError(final long packed) {
+    public static boolean isError(final long packedResultAndErrno) {
         return ErrnoState.unpackResult(packed) < 0
                 && ErrnoState.unpackErrno(packed) != Errno.EINTR();
     }
