@@ -37,6 +37,8 @@ class KqueueTcpIntegrationTest {
                 .withClient()
                 .build()) {
 
+            ctx.registerEvent(ctx.accepted().fd(), KqueueIO.EVFILT_READ, KqueueIO.EV_ADD);
+
             final MemorySegment buf1 = ctx.arena().allocateFrom(
                     ValueLayout.JAVA_BYTE, "hello ".getBytes());
             final MemorySegment buf2 = ctx.arena().allocateFrom(
@@ -53,6 +55,8 @@ class KqueueTcpIntegrationTest {
                     iov.activeMemory(), iov.activeCount(), ctx.capturedState());
             assertEquals(19, ErrnoState.unpackResult(writevResult));
 
+            ctx.pollAndExpectReadable(ctx.accepted().fd());
+
             final String received = ctx.readString(ctx.accepted(), 19);
             assertEquals("hello kqueue writev", received);
         }
@@ -65,10 +69,15 @@ class KqueueTcpIntegrationTest {
                 .withClient()
                 .build()) {
 
+            ctx.registerEvent(ctx.accepted().fd(), KqueueIO.EVFILT_READ, KqueueIO.EV_ADD);
+            ctx.registerEvent(ctx.client().fd(), KqueueIO.EVFILT_READ, KqueueIO.EV_ADD);
+
             ctx.clientWrite("ping");
+            ctx.pollAndExpectReadable(ctx.accepted().fd());
             assertEquals("ping", ctx.readString(ctx.accepted(), 4));
 
             ctx.acceptedWrite("pong");
+            ctx.pollAndExpectReadable(ctx.client().fd());
             assertEquals("pong", ctx.readString(ctx.client(), 4));
         }
     }
