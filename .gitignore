@@ -58,3 +58,6 @@ mainframer
 
 # Local env
 .local
+
+# Benchmark results
+benchmarks/results
