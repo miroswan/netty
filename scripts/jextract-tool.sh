@@ -11,18 +11,13 @@
 #   TARGET_PACKAGE  — java package for generated code
 #   BINDINGS        — array of binding declarations
 #
-# Opinionated defaults (overridable in config):
-#   INCLUDE_ERRNO=true         — generate errno binding automatically
-#   ERRNO_FUNCTION             — platform-detected (__error on macOS, __errno_location on Linux)
-#   ERRNO_CONSTANTS            — common POSIX errno values
-#
 # Each BINDINGS entry is: "<header> <class-name> [jextract flags...]"
 # Flags are passed directly to jextract (--include-function, --include-constant, etc.)
 #
 # Example config:
 #   HEADER_DIR="headers"
 #   OUTPUT_DIR="src/main/java"
-#   TARGET_PACKAGE="io.netty.channel.unix.generated"
+#   TARGET_PACKAGE="io.netty.ffm.macos.generated"
 #
 #   BINDINGS=(
 #     "socket.h BsdSocket --include-function socket --include-function bind --include-constant AF_INET"
@@ -33,26 +28,6 @@ set -euo pipefail
 
 readonly LOG_PREFIX="jextract-tool"
 source "$(git rev-parse --show-toplevel)/scripts/lib/logging.sh"
-
-# --- Platform defaults ---
-
-case "$(uname -s)" in
-  (Darwin)
-    DEFAULT_ERRNO_FUNCTION="__error"
-    ;;
-  (Linux)
-    DEFAULT_ERRNO_FUNCTION="__errno_location"
-    ;;
-  (*)
-    DEFAULT_ERRNO_FUNCTION=""
-    ;;
-esac
-
-DEFAULT_ERRNO_CONSTANTS=(
-  EAGAIN EINTR EWOULDBLOCK EINVAL EINPROGRESS EPIPE
-  ECONNABORTED ECONNRESET ENOTCONN ESHUTDOWN ENOENT
-  EBADF ECONNREFUSED
-)
 
 # --- Resolve jextract binary ---
 
@@ -92,8 +67,7 @@ function _resolve_jextract {
 # the config only needs to set what it wants to override.
 #
 # Args: <config-file>
-# Sets: HEADER_DIR, OUTPUT_DIR, TARGET_PACKAGE, INCLUDE_ERRNO,
-#       ERRNO_FUNCTION, ERRNO_CONSTANTS, BINDINGS
+# Sets: HEADER_DIR, OUTPUT_DIR, TARGET_PACKAGE, BINDINGS
 # Returns 1 if the config file does not exist.
 function _load_config {
   local config_file="$1"
@@ -109,9 +83,6 @@ function _load_config {
   HEADER_DIR=""
   OUTPUT_DIR=""
   TARGET_PACKAGE=""
-  INCLUDE_ERRNO=true
-  ERRNO_FUNCTION="$DEFAULT_ERRNO_FUNCTION"
-  ERRNO_CONSTANTS=("${DEFAULT_ERRNO_CONSTANTS[@]}")
   BINDINGS=()
 
   source "$config_file"
@@ -177,34 +148,6 @@ function _run_binding {
   }
 }
 
-# Generates the errno binding using platform-detected defaults unless the
-# config has set INCLUDE_ERRNO=false. Skips with a warning if errno.h is
-# not found in HEADER_DIR.
-# Returns 1 if jextract fails.
-function _generate_errno_binding {
-  if [ "$INCLUDE_ERRNO" != true ]; then
-    return 0
-  fi
-
-  if [ -z "$ERRNO_FUNCTION" ]; then
-    log_error "No errno function known for this platform. Set ERRNO_FUNCTION in config or INCLUDE_ERRNO=false"
-    return 1
-  fi
-
-  if [ ! -f "$HEADER_DIR/errno.h" ]; then
-    log_warn "errno.h not found in $HEADER_DIR — skipping errno binding"
-    return 0
-  fi
-
-  local -a errno_args=()
-  errno_args+=(--include-function "$ERRNO_FUNCTION")
-  for constant in "${ERRNO_CONSTANTS[@]}"; do
-    errno_args+=(--include-constant "$constant")
-  done
-
-  _run_binding errno.h Errno "${errno_args[@]}" || return $?
-}
-
 # Iterates the BINDINGS array and runs jextract for each entry. Each entry
 # is word-split into: <header> <class-name> [jextract flags...].
 # Returns 1 if any binding fails.
@@ -232,7 +175,6 @@ function main {
     return 1
   }
 
-  _generate_errno_binding || return $?
   _generate_bindings || return $?
 
   log_info "Done. Generated bindings in $OUTPUT_DIR/$(echo "$TARGET_PACKAGE" | tr '.' '/')"
