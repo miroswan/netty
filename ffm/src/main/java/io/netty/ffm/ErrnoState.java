@@ -75,7 +75,7 @@ public final class ErrnoState {
      * @return the syscall result as a signed 32-bit integer
      */
     public static int unpackResult(final long packedResultAndErrno) {
-        return (int) (packed >>> 32);
+        return (int) (packedResultAndErrno >>> 32);
     }
 
     /**
@@ -85,6 +85,6 @@ public final class ErrnoState {
      * @return the errno value
      */
     public static int unpackErrno(final long packedResultAndErrno) {
-        return (int) packed;
+        return (int) packedResultAndErrno;
     }
 }

@@ -1,6 +1,6 @@
 HEADER_DIR="headers/macos"
 OUTPUT_DIR="src/main/java"
-TARGET_PACKAGE="io.netty.ffm.kqueue.generated"
+TARGET_PACKAGE="io.netty.ffm.macos.generated"
 INCLUDE_ERRNO=false
 
 BINDINGS=(
