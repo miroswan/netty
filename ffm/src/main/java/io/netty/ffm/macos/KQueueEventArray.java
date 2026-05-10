@@ -4,6 +4,7 @@ import io.netty.ffm.macos.generated.kevent;
 
 import java.lang.foreign.Arena;
 import java.lang.foreign.MemorySegment;
+import java.lang.foreign.ValueLayout;
 
 /**
  * Arena-backed growable array of {@code struct kevent} entries. Used as both the changelist
@@ -145,6 +146,25 @@ public final class KQueueEventArray {
      */
     public long data(final int index) {
         return KqueueIO.data(memory, index);
+    }
+
+    /**
+     * Reads the {@code udata} field from the kevent at the given index.
+     *
+     * @param index the zero-based event index
+     * @return the user data value
+     */
+    public long udata(final int index) {
+        return memory.get(ValueLayout.JAVA_LONG,
+                index * KqueueIO.KEVENT_SIZE + KqueueIO.UDATA_OFFSET);
+    }
+
+    /**
+     * Reallocates the backing memory to double the current capacity. Existing entries
+     * are preserved. Use when the eventlist was fully consumed on the previous poll.
+     */
+    public void realloc() {
+        grow();
     }
 
     private void grow() {
