@@ -83,6 +83,16 @@ public final class KqueueIO {
     public static final short EV_ONESHOT = (short) Event.EV_ONESHOT();
     /** User event fflags: trigger the event for output. */
     public static final int NOTE_TRIGGER = Event.NOTE_TRIGGER();
+    /** Filter: socket-level events (peer shutdown detection). macOS 10.15+. */
+    public static final short EVFILT_SOCK = -13;
+    /** Note: remote peer closed read side. */
+    public static final int NOTE_READCLOSED = 0x00000010;
+    /** Note: connection reset by peer. */
+    public static final int NOTE_CONNRESET = 0x00000020;
+    /** Note: peer disconnected. */
+    public static final int NOTE_DISCONNECTED = 0x00001000;
+    /** Composite note for remote half-close detection. */
+    public static final int NOTE_RDHUP = NOTE_READCLOSED | NOTE_CONNRESET | NOTE_DISCONNECTED;
 
     private KqueueIO() {
     }

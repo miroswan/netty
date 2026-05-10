@@ -8,6 +8,7 @@ import io.netty.ffm.macos.generated.Tcp;
 import io.netty.ffm.posix.FileDescriptor;
 import io.netty.ffm.posix.SocketOptions;
 
+import java.lang.foreign.Arena;
 import java.lang.foreign.MemorySegment;
 import java.lang.foreign.SegmentAllocator;
 import java.lang.foreign.ValueLayout;
@@ -27,6 +28,9 @@ import java.net.InetSocketAddress;
 public final class NativeSocket extends FileDescriptor {
 
     private final int family;
+    private boolean inputShutdown;
+    private boolean outputShutdown;
+    private boolean closed;
 
     private NativeSocket(final int fd, final int family) {
         super(fd);
@@ -157,11 +161,19 @@ public final class NativeSocket extends FileDescriptor {
      * @return 0 on success, -1 on error
      */
     public int shutdown(final ShutdownMode mode) {
-        return switch (mode) {
+        final int result = switch (mode) {
             case READ -> SocketIO.shutdown(fd(), BsdSocket.SHUT_RD());
             case WRITE -> SocketIO.shutdown(fd(), BsdSocket.SHUT_WR());
             case READ_WRITE -> SocketIO.shutdown(fd(), BsdSocket.SHUT_RDWR());
         };
+        if (result == 0) {
+            switch (mode) {
+                case READ -> inputShutdown = true;
+                case WRITE -> outputShutdown = true;
+                case READ_WRITE -> { inputShutdown = true; outputShutdown = true; }
+            }
+        }
+        return result;
     }
 
     // --- Socket options ---
@@ -273,6 +285,64 @@ public final class NativeSocket extends FileDescriptor {
      */
     public InetSocketAddress remoteAddress(final SegmentAllocator allocator) {
         return getSocketAddress(allocator, false);
+    }
+
+    /**
+     * Returns whether this socket's file descriptor is still open.
+     *
+     * @return {@code true} if the socket has not been closed
+     */
+    public boolean isOpen() {
+        return !closed;
+    }
+
+    /**
+     * Returns whether the input side of this socket has been shut down.
+     *
+     * @return {@code true} if shutdown(READ) has been called
+     */
+    public boolean isInputShutdown() {
+        return inputShutdown;
+    }
+
+    /**
+     * Returns whether the output side of this socket has been shut down.
+     *
+     * @return {@code true} if shutdown(WRITE) has been called
+     */
+    public boolean isOutputShutdown() {
+        return outputShutdown;
+    }
+
+    /**
+     * Completes a non-blocking connect by checking {@code SO_ERROR}. Returns
+     * {@code true} if the connection is established (SO_ERROR == 0), {@code false}
+     * if still in progress (should not happen after EVFILT_WRITE fires), or throws
+     * if SO_ERROR indicates a failure.
+     *
+     * @param capturedState pre-allocated segment for errno capture (used by getSoError)
+     * @return {@code true} if connected successfully
+     * @throws java.net.ConnectException if SO_ERROR indicates a connection failure
+     */
+    public boolean finishConnect(final MemorySegment capturedState) throws Exception {
+        try (final Arena tempArena = Arena.ofConfined()) {
+            final int soError = getSoError(tempArena);
+            if (soError == 0) {
+                return true;
+            }
+            throw new java.net.ConnectException("connect failed: errno=" + soError);
+        }
+    }
+
+    /**
+     * Closes this socket and marks it as closed.
+     */
+    @Override
+    public void close() {
+        if (!closed) {
+            closed = true;
+            super.close();
+        }
     }
 
     private int setIntOption(final SegmentAllocator allocator, final int level,

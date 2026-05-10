@@ -523,6 +523,7 @@
     <module>transport-native-io_uring</module>
     <module>transport-classes-kqueue</module>
     <module>transport-native-kqueue</module>
+    <module>ffm</module>
     <module>transport-sctp</module>
     <module>handler</module>
     <module>handler-proxy</module>

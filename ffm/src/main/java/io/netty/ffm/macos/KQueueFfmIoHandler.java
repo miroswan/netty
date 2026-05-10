@@ -13,6 +13,7 @@ import io.netty.channel.kqueue.KQueueIoEvent;
 import io.netty.channel.kqueue.KQueueIoHandle;
 import io.netty.channel.kqueue.KQueueIoOps;
 import io.netty.ffm.ErrnoState;
+import io.netty.ffm.macos.channel.FfmNativeArrays;
 import io.netty.ffm.macos.generated.Event;
 import io.netty.ffm.macos.generated.kevent;
 import io.netty.ffm.posix.FileIO;
@@ -81,6 +82,7 @@ public final class KQueueFfmIoHandler implements IoHandler, AutoCloseable {
     private KQueueEventArray eventlist;
     private MemorySegment capturedState;
     private MemorySegment timeoutBuffer;
+    private FfmNativeArrays nativeArrays;
 
     private long nextId;
     private volatile int wakenUp;
@@ -178,6 +180,7 @@ public final class KQueueFfmIoHandler implements IoHandler, AutoCloseable {
         this.changelist = new KQueueEventArray(arena, maxEvents);
         this.eventlist = new KQueueEventArray(arena, maxEvents);
         this.timeoutBuffer = arena.allocate(16);
+        this.nativeArrays = new FfmNativeArrays(arena);
 
         registerWakeupFilter();
     }
@@ -565,15 +568,15 @@ public final class KQueueFfmIoHandler implements IoHandler, AutoCloseable {
         }
 
         /**
-         * Returns {@code null}. The attachment mechanism is reserved for pass 2 when FFM
-         * channel classes will provide an FFM-backed {@code IovArray} here for vectored writes.
+         * Returns the shared {@link FfmNativeArrays} for this event loop. Channels use
+         * this to access the reusable IovArray, capturedState, and sendfile buffer.
          *
-         * @return {@code null}
+         * @return the per-event-loop native arrays
          */
         @SuppressWarnings("unchecked")
         @Override
         public <T> T attachment() {
-            return null;
+            return (T) nativeArrays;
         }
 
         /**
