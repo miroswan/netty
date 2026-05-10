@@ -13,6 +13,7 @@ import java.lang.foreign.MemorySegment;
 import java.lang.foreign.SegmentAllocator;
 import java.lang.foreign.ValueLayout;
 import java.net.InetSocketAddress;
+import java.net.UnixDomainSocketAddress;
 
 /**
  * A socket backed by macOS FFM syscalls. Extends {@link FileDescriptor} to inherit
@@ -116,6 +117,18 @@ public final class NativeSocket extends FileDescriptor {
     }
 
     /**
+     * Binds this socket to a Unix domain socket path.
+     *
+     * @param allocator the allocator for the native sockaddr_un struct
+     * @param address the Unix domain socket address to bind to
+     * @return 0 on success, -1 on error
+     */
+    public int bind(final SegmentAllocator allocator, final UnixDomainSocketAddress address) {
+        final MemorySegment sa = SockaddrUtil.toSockaddrUn(allocator, address);
+        return SocketIO.bind(fd(), sa, SockaddrUtil.sockaddrUnSize(address));
+    }
+
+    /**
      * Marks this socket as passive (accepting connections).
      *
      * @param backlog the maximum pending connection queue length
@@ -139,6 +152,22 @@ public final class NativeSocket extends FileDescriptor {
                         final MemorySegment capturedState) {
         final MemorySegment sa = SockaddrUtil.toSockaddr(allocator, address);
         return SocketIO.connect(fd(), sa, SockaddrUtil.sockaddrSize(address), capturedState);
+    }
+
+    /**
+     * Initiates a connection to a Unix domain socket address with atomic errno capture.
+     *
+     * @param allocator the allocator for the native sockaddr_un struct
+     * @param address the Unix domain socket address to connect to
+     * @param capturedState pre-allocated segment sized to {@link ErrnoState#layout()}
+     * @return a bit-packed {@code long} with connect result and errno
+     * @see SocketIO#connectIsConnected(long)
+     * @see SocketIO#connectIsInProgress(long)
+     */
+    public long connect(final SegmentAllocator allocator, final UnixDomainSocketAddress address,
+                        final MemorySegment capturedState) {
+        final MemorySegment sa = SockaddrUtil.toSockaddrUn(allocator, address);
+        return SocketIO.connect(fd(), sa, SockaddrUtil.sockaddrUnSize(address), capturedState);
     }
 
     /**
@@ -255,6 +284,56 @@ public final class NativeSocket extends FileDescriptor {
      */
     public int setReceiveBufferSize(final SegmentAllocator allocator, final int size) {
         return setIntOption(allocator, BsdSocket.SOL_SOCKET(), BsdSocket.SO_RCVBUF(), size);
+    }
+
+    /**
+     * Gets the TCP_NODELAY option value.
+     *
+     * @param allocator the allocator for the option value and length segments
+     * @return non-zero if TCP_NODELAY is enabled, 0 otherwise
+     */
+    public int getTcpNoDelay(final SegmentAllocator allocator) {
+        return getIntOption(allocator, In.IPPROTO_TCP(), Tcp.TCP_NODELAY());
+    }
+
+    /**
+     * Gets the SO_KEEPALIVE option value.
+     *
+     * @param allocator the allocator for the option value and length segments
+     * @return non-zero if keepalive is enabled, 0 otherwise
+     */
+    public int getKeepAlive(final SegmentAllocator allocator) {
+        return getIntOption(allocator, BsdSocket.SOL_SOCKET(), BsdSocket.SO_KEEPALIVE());
+    }
+
+    /**
+     * Gets the SO_REUSEADDR option value.
+     *
+     * @param allocator the allocator for the option value and length segments
+     * @return non-zero if address reuse is enabled, 0 otherwise
+     */
+    public int getReuseAddress(final SegmentAllocator allocator) {
+        return getIntOption(allocator, BsdSocket.SOL_SOCKET(), BsdSocket.SO_REUSEADDR());
+    }
+
+    /**
+     * Gets the SO_SNDBUF size in bytes.
+     *
+     * @param allocator the allocator for the option value and length segments
+     * @return the send buffer size
+     */
+    public int getSendBufferSize(final SegmentAllocator allocator) {
+        return getIntOption(allocator, BsdSocket.SOL_SOCKET(), BsdSocket.SO_SNDBUF());
+    }
+
+    /**
+     * Gets the SO_RCVBUF size in bytes.
+     *
+     * @param allocator the allocator for the option value and length segments
+     * @return the receive buffer size
+     */
+    public int getReceiveBufferSize(final SegmentAllocator allocator) {
+        return getIntOption(allocator, BsdSocket.SOL_SOCKET(), BsdSocket.SO_RCVBUF());
     }
 
     /**

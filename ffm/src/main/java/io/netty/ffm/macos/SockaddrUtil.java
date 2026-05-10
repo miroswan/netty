@@ -5,6 +5,7 @@ import io.netty.ffm.macos.generated.in6_addr;
 import io.netty.ffm.macos.generated.in_addr;
 import io.netty.ffm.macos.generated.sockaddr_in;
 import io.netty.ffm.macos.generated.sockaddr_in6;
+import io.netty.ffm.macos.generated.sockaddr_un;
 
 import java.lang.foreign.MemorySegment;
 import java.lang.foreign.SegmentAllocator;
@@ -13,7 +14,10 @@ import java.net.Inet4Address;
 import java.net.Inet6Address;
 import java.net.InetAddress;
 import java.net.InetSocketAddress;
+import java.net.SocketAddress;
+import java.net.UnixDomainSocketAddress;
 import java.net.UnknownHostException;
+import java.nio.charset.StandardCharsets;
 
 /**
  * Converts between Java {@link InetSocketAddress} and macOS native
@@ -82,6 +86,62 @@ public final class SockaddrUtil {
             return fromSockaddrIn6(sockaddr);
         }
         throw new IllegalArgumentException("Unsupported address family: " + (family & 0xFF));
+    }
+
+    /**
+     * Allocates and populates a {@code sockaddr_un} from a Java
+     * {@link UnixDomainSocketAddress}. The path is null-terminated and must
+     * fit within the 104-byte {@code sun_path} field.
+     *
+     * @param allocator the allocator for the native struct
+     * @param address the Unix domain socket address
+     * @return a segment containing the populated sockaddr_un struct
+     * @throws IllegalArgumentException if the path exceeds 103 bytes (plus null terminator)
+     */
+    public static MemorySegment toSockaddrUn(final SegmentAllocator allocator,
+                                             final UnixDomainSocketAddress address) {
+        final byte[] pathBytes = address.getPath().toString().getBytes(StandardCharsets.UTF_8);
+        if (pathBytes.length > 103) {
+            throw new IllegalArgumentException(
+                    "Unix domain socket path too long: " + pathBytes.length + " bytes (max 103)");
+        }
+        final MemorySegment sa = sockaddr_un.allocate(allocator);
+        sockaddr_un.sun_len(sa, (byte) (2 + pathBytes.length + 1));
+        sockaddr_un.sun_family(sa, (byte) BsdSocket.AF_UNIX());
+        final long pathOffset = sockaddr_un.sun_path$offset();
+        MemorySegment.copy(pathBytes, 0, sa, ValueLayout.JAVA_BYTE, pathOffset, pathBytes.length);
+        sa.set(ValueLayout.JAVA_BYTE, pathOffset + pathBytes.length, (byte) 0);
+        return sa;
+    }
+
+    /**
+     * Returns the size in bytes of a populated {@code sockaddr_un} for the given address.
+     *
+     * @param address the Unix domain socket address
+     * @return the size of the sockaddr_un including the path
+     */
+    public static int sockaddrUnSize(final UnixDomainSocketAddress address) {
+        final byte[] pathBytes = address.getPath().toString().getBytes(StandardCharsets.UTF_8);
+        return 2 + pathBytes.length + 1;
+    }
+
+    /**
+     * Reads a native {@code sockaddr_un} and converts it to a Java
+     * {@link UnixDomainSocketAddress}.
+     *
+     * @param sockaddr a segment containing a populated sockaddr_un struct
+     * @return the corresponding Java Unix domain socket address
+     */
+    public static UnixDomainSocketAddress fromSockaddrUn(final MemorySegment sockaddr) {
+        final long pathOffset = sockaddr_un.sun_path$offset();
+        final int maxLen = 104;
+        int len = 0;
+        while (len < maxLen && sockaddr.get(ValueLayout.JAVA_BYTE, pathOffset + len) != 0) {
+            len++;
+        }
+        final byte[] pathBytes = new byte[len];
+        MemorySegment.copy(sockaddr, ValueLayout.JAVA_BYTE, pathOffset, pathBytes, 0, len);
+        return UnixDomainSocketAddress.of(new String(pathBytes, StandardCharsets.UTF_8));
     }
 
     private static MemorySegment toSockaddrIn(final SegmentAllocator allocator, final int port,

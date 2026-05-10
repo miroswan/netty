@@ -7,17 +7,21 @@ import io.netty.channel.ChannelConfig;
 import io.netty.channel.ChannelOutboundBuffer;
 import io.netty.channel.ChannelPipeline;
 import io.netty.channel.ChannelShutdownType;
-import io.netty.channel.DefaultChannelConfig;
+import io.netty.channel.DefaultFileRegion;
 import io.netty.channel.EventLoop;
 import io.netty.channel.RecvByteBufAllocator;
 import io.netty.channel.socket.ServerSocketChannel;
 import io.netty.channel.socket.SocketChannel;
 import io.netty.ffm.ErrnoState;
 import io.netty.ffm.macos.NativeSocket;
+import io.netty.ffm.macos.SendfileIO;
 import io.netty.ffm.macos.generated.BsdSocket;
 import io.netty.ffm.posix.FileIO;
 import io.netty.ffm.posix.IovArray;
 import io.netty.util.concurrent.Promise;
+
+import java.lang.foreign.MemorySegment;
+import java.lang.foreign.ValueLayout;
 
 import java.lang.foreign.MemorySegment;
 import java.net.InetSocketAddress;
@@ -40,13 +44,13 @@ import static io.netty.channel.internal.ChannelUtils.WRITE_STATUS_SNDBUF_FULL;
 public final class KQueueFfmSocketChannel extends AbstractKQueueFfmChannel implements SocketChannel {
 
     private static final String EXPECTED_TYPES =
-            " (expected: " + ByteBuf.class.getSimpleName() + ')';
+            " (expected: " + ByteBuf.class.getSimpleName() + " or "
+            + DefaultFileRegion.class.getSimpleName() + ')';
     private static final long DEFAULT_MAX_BYTES_PER_GATHERING_WRITE = Long.MAX_VALUE;
 
     private final Runnable flushTask = this::writeFlushedNow;
-    private final ChannelConfig config;
+    private final KQueueFfmSocketChannelConfig config;
     private long maxBytesPerGatheringWrite = DEFAULT_MAX_BYTES_PER_GATHERING_WRITE;
-    private boolean allowHalfClosure;
 
     /**
      * Creates a new client socket channel for the given address family.
@@ -79,13 +83,13 @@ public final class KQueueFfmSocketChannel extends AbstractKQueueFfmChannel imple
     KQueueFfmSocketChannel(final EventLoop eventLoop, final Channel parent,
                            final NativeSocket socket, final SocketAddress remoteAddress) {
         super(eventLoop, parent, socket, remoteAddress, true);
-        this.config = new DefaultChannelConfig(this);
+        this.config = new KQueueFfmSocketChannelConfig(this, socket);
     }
 
     private KQueueFfmSocketChannel(final EventLoop eventLoop, final Channel parent,
                                    final NativeSocket socket, final boolean active) {
         super(eventLoop, parent, socket, active, true);
-        this.config = new DefaultChannelConfig(this);
+        this.config = new KQueueFfmSocketChannelConfig(this, socket);
     }
 
     private static NativeSocket createSocket(final int family) {
@@ -110,7 +114,7 @@ public final class KQueueFfmSocketChannel extends AbstractKQueueFfmChannel imple
      * @return the config
      */
     @Override
-    public ChannelConfig config() {
+    public KQueueFfmSocketChannelConfig config() {
         return config;
     }
 
@@ -129,6 +133,9 @@ public final class KQueueFfmSocketChannel extends AbstractKQueueFfmChannel imple
                 return buf;
             }
             return newDirectBuffer(buf);
+        }
+        if (msg instanceof DefaultFileRegion) {
+            return msg;
         }
         throw new UnsupportedOperationException(
                 "unsupported message type: " + msg.getClass().getSimpleName() + EXPECTED_TYPES);
@@ -167,8 +174,8 @@ public final class KQueueFfmSocketChannel extends AbstractKQueueFfmChannel imple
     }
 
     /**
-     * Writes a single message from the outbound buffer. Currently supports
-     * {@link ByteBuf} only.
+     * Writes a single message from the outbound buffer. Supports {@link ByteBuf}
+     * and {@link DefaultFileRegion} (zero-copy via sendfile).
      *
      * @param in the outbound buffer
      * @return the write spin decrement (0, 1, or WRITE_STATUS_SNDBUF_FULL)
@@ -182,6 +189,9 @@ public final class KQueueFfmSocketChannel extends AbstractKQueueFfmChannel imple
                 return 0;
             }
             return doWriteBytes(in, buf);
+        }
+        if (msg instanceof DefaultFileRegion region) {
+            return writeFileRegion(in, region);
         }
         throw new UnsupportedOperationException(
                 "unexpected message type: " + msg.getClass().getSimpleName());
@@ -223,6 +233,57 @@ public final class KQueueFfmSocketChannel extends AbstractKQueueFfmChannel imple
         if (bytesWritten > 0) {
             in.removeBytes(bytesWritten);
             return 1;
+        }
+        return WRITE_STATUS_SNDBUF_FULL;
+    }
+
+    /**
+     * Writes a {@link DefaultFileRegion} using macOS zero-copy {@code sendfile(2)}.
+     * Extracts the file descriptor from the region's {@link java.nio.channels.FileChannel},
+     * then transfers bytes directly to the socket without userspace copies.
+     *
+     * <p>On partial transfer (EAGAIN), the {@code lenBuf} out-parameter still contains
+     * the number of bytes actually sent, which is used to advance the region's transfer
+     * counter.
+     *
+     * @param in the outbound buffer
+     * @param region the file region to transfer
+     * @return the write spin decrement (0, 1, or WRITE_STATUS_SNDBUF_FULL)
+     * @throws Exception on fatal sendfile failure
+     */
+    private int writeFileRegion(final ChannelOutboundBuffer in,
+                                final DefaultFileRegion region) throws Exception {
+        final long regionCount = region.count();
+        final long offset = region.transferred();
+
+        if (offset >= regionCount) {
+            in.remove();
+            return 0;
+        }
+
+        final long toSend = regionCount - offset;
+        final FfmNativeArrays arrays = nativeArrays();
+        final MemorySegment lenBuf = arrays.sendfileLenBuf();
+        lenBuf.set(ValueLayout.JAVA_LONG, 0, toSend);
+
+        final int fileFd = FileDescriptorUtil.getFd(region);
+        final long packed = SendfileIO.sendfile(
+                fileFd, socket.fd(), region.position() + offset, lenBuf, arrays.capturedState());
+
+        final long bytesSent = lenBuf.get(ValueLayout.JAVA_LONG, 0);
+        if (bytesSent > 0) {
+            FileDescriptorUtil.setTransferred(region, offset + bytesSent);
+            if (region.transferred() >= regionCount) {
+                in.remove();
+            }
+            return 1;
+        }
+        if (SendfileIO.wouldBlock(packed)) {
+            return WRITE_STATUS_SNDBUF_FULL;
+        }
+        if (!SendfileIO.isSuccess(packed)) {
+            throw new io.netty.channel.ChannelException(
+                    "sendfile() failed: errno=" + ErrnoState.unpackErrno(packed));
         }
         return WRITE_STATUS_SNDBUF_FULL;
     }
@@ -312,7 +373,7 @@ public final class KQueueFfmSocketChannel extends AbstractKQueueFfmChannel imple
 
     @Override
     protected boolean isAllowHalfClosure() {
-        return allowHalfClosure;
+        return config.isAllowHalfClosure();
     }
 
     @Override

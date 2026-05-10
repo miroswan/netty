@@ -5,7 +5,6 @@ import io.netty.channel.ChannelConfig;
 import io.netty.channel.ChannelOutboundBuffer;
 import io.netty.channel.ChannelPipeline;
 import io.netty.channel.ChannelShutdownType;
-import io.netty.channel.DefaultChannelConfig;
 import io.netty.channel.EventLoop;
 import io.netty.channel.EventLoopGroup;
 import io.netty.channel.RecvByteBufAllocator;
@@ -33,9 +32,8 @@ public final class KQueueFfmServerSocketChannel extends AbstractKQueueFfmChannel
 
     private static final int DEFAULT_BACKLOG = 128;
 
-    private final ChannelConfig config;
+    private final KQueueFfmServerSocketChannelConfig config;
     private final EventLoopGroup childEventLoopGroup;
-    private int backlog = DEFAULT_BACKLOG;
 
     /**
      * Creates a new server socket channel for the default IPv4 family.
@@ -60,7 +58,7 @@ public final class KQueueFfmServerSocketChannel extends AbstractKQueueFfmChannel
                                         final int family) {
         super(eventLoop, null, createSocket(family), false, false);
         this.childEventLoopGroup = childEventLoopGroup;
-        this.config = new DefaultChannelConfig(this);
+        this.config = new KQueueFfmServerSocketChannelConfig(this, socket);
     }
 
     private static NativeSocket createSocket(final int family) {
@@ -75,7 +73,7 @@ public final class KQueueFfmServerSocketChannel extends AbstractKQueueFfmChannel
      * @return the config
      */
     @Override
-    public ChannelConfig config() {
+    public KQueueFfmServerSocketChannelConfig config() {
         return config;
     }
 
@@ -99,7 +97,7 @@ public final class KQueueFfmServerSocketChannel extends AbstractKQueueFfmChannel
     protected void doBind(final SocketAddress localAddr, final Promise<Void> promise) {
         super.doBind(localAddr, promise);
         if (promise.isSuccess()) {
-            socket.listen(backlog);
+            socket.listen(config.getBacklog());
             active = true;
         }
     }
