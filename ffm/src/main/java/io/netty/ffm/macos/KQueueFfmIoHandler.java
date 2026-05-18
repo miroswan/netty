@@ -60,6 +60,7 @@ public final class KQueueFfmIoHandler implements IoHandler, AutoCloseable {
     private static final int KQUEUE_MAX_TIMEOUT_SECONDS = 86399;
 
     private final boolean allowGrowing;
+    private final int maxEvents;
     private final int kqueueFd;
     private final SelectStrategy selectStrategy;
     private final ThreadAwareExecutor executor;
@@ -77,7 +78,8 @@ public final class KQueueFfmIoHandler implements IoHandler, AutoCloseable {
     // timeoutBuffer) are accessed exclusively from the executor thread. A confined arena
     // avoids the synchronization overhead of shared arenas and enforces single-threaded
     // ownership at the JVM level, aligning with Netty's single-threaded executor model.
-    private final Arena arena = Arena.ofConfined();
+    // Created in initialize() which is guaranteed to run on the executor thread.
+    private Arena arena;
     private KQueueEventArray changelist;
     private KQueueEventArray eventlist;
     private MemorySegment capturedState;
@@ -167,22 +169,32 @@ public final class KQueueFfmIoHandler implements IoHandler, AutoCloseable {
         }
         if (maxEvents == 0) {
             allowGrowing = true;
-            maxEvents = 4096;
+            this.maxEvents = 4096;
         } else {
             allowGrowing = false;
+            this.maxEvents = maxEvents;
         }
 
         this.wakeupEvent = kevent.allocate(wakeupArena);
         KqueueIO.evSet(wakeupEvent, KQUEUE_WAKE_UP_IDENT, KqueueIO.EVFILT_USER,
                 (short) 0, KqueueIO.NOTE_TRIGGER, 0L, 0L);
 
+        registerWakeupFilter();
+    }
+
+    /**
+     * Allocates the confined arena and all event-loop-thread resources. Called by the
+     * framework on the executor thread before the first {@link #run} invocation, ensuring
+     * the confined arena is owned by the correct thread.
+     */
+    @Override
+    public void initialize() {
+        this.arena = Arena.ofConfined();
         this.capturedState = arena.allocate(ErrnoState.layout());
         this.changelist = new KQueueEventArray(arena, maxEvents);
         this.eventlist = new KQueueEventArray(arena, maxEvents);
         this.timeoutBuffer = arena.allocate(16);
         this.nativeArrays = new FfmNativeArrays(arena);
-
-        registerWakeupFilter();
     }
 
     /**
@@ -250,6 +262,9 @@ public final class KQueueFfmIoHandler implements IoHandler, AutoCloseable {
      */
     @Override
     public int run(final IoHandlerContext context) {
+        if (arena == null) {
+            initialize();
+        }
         int handled = 0;
         try {
             int strategy = selectStrategy.calculateStrategy(selectNowSupplier, !context.canBlock());
@@ -462,6 +477,9 @@ public final class KQueueFfmIoHandler implements IoHandler, AutoCloseable {
      */
     @Override
     public IoRegistration register(final IoHandle handle) {
+        if (arena == null) {
+            initialize();
+        }
         final KQueueIoHandle kqueueHandle = cast(handle);
         if (kqueueHandle.ident() == KQUEUE_WAKE_UP_IDENT) {
             throw new IllegalArgumentException(

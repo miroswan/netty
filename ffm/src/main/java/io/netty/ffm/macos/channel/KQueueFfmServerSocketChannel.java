@@ -16,6 +16,7 @@ import io.netty.ffm.macos.generated.BsdSocket;
 import io.netty.util.concurrent.Promise;
 
 import java.lang.foreign.Arena;
+import java.net.InetSocketAddress;
 import java.net.SocketAddress;
 
 /**
@@ -95,11 +96,23 @@ public final class KQueueFfmServerSocketChannel extends AbstractKQueueFfmChannel
      */
     @Override
     protected void doBind(final SocketAddress localAddr, final Promise<Void> promise) {
-        super.doBind(localAddr, promise);
-        if (promise.isSuccess()) {
+        try {
+            if (localAddr instanceof InetSocketAddress) {
+                checkResolvable((InetSocketAddress) localAddr);
+            }
+            try (final Arena tempArena = Arena.ofConfined()) {
+                socket.bind(tempArena, (InetSocketAddress) localAddr);
+            }
             socket.listen(config.getBacklog());
             active = true;
+            try (final Arena tempArena = Arena.ofConfined()) {
+                local = socket.localAddress(tempArena);
+            }
+        } catch (final Throwable cause) {
+            promise.setFailure(cause);
+            return;
         }
+        promise.setSuccess(null);
     }
 
     /**

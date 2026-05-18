@@ -77,6 +77,16 @@
 
   <profiles>
     <profile>
+      <id>jdk25-osgi-bypass</id>
+      <activation>
+        <jdk>[25,)</jdk>
+      </activation>
+      <properties>
+        <osgi.manifest.phase>none</osgi.manifest.phase>
+        <osgi.manifest.file />
+      </properties>
+    </profile>
+    <profile>
       <id>aggregate</id>
       <properties>
         <checkstyle.skip>true</checkstyle.skip>
@@ -418,6 +428,8 @@
   </profiles>
 
   <properties>
+    <osgi.manifest.phase>process-classes</osgi.manifest.phase>
+    <osgi.manifest.file>${project.build.outputDirectory}/META-INF/MANIFEST.MF</osgi.manifest.file>
     <maven.compiler.source>1.8</maven.compiler.source>
     <maven.compiler.target>1.8</maven.compiler.target>
     <maven.compiler.release />
@@ -1279,7 +1291,7 @@
           <!-- Default execution. Note that transport-native-* have additional executions. -->
           <execution>
             <id>generate-manifest</id>
-            <phase>process-classes</phase>
+            <phase>${osgi.manifest.phase}</phase>
             <goals>
               <goal>manifest</goal>
             </goals>
@@ -1654,7 +1666,7 @@
                     <Multi-Release>${multiReleaseJar}</Multi-Release>
                   </manifestEntries>
                   <index>true</index>
-                  <manifestFile>${project.build.outputDirectory}/META-INF/MANIFEST.MF</manifestFile>
+                  <manifestFile>${osgi.manifest.file}</manifestFile>
                 </archive>
               </configuration>
             </execution>

@@ -74,8 +74,8 @@ abstract class AbstractKQueueFfmChannel extends AbstractChannel {
     boolean readReadyRunnablePending;
     boolean inputClosedSeenErrorOnRead;
     protected volatile boolean active;
-    private volatile SocketAddress local;
-    private volatile SocketAddress remote;
+    volatile SocketAddress local;
+    volatile SocketAddress remote;
 
     /**
      * Creates a channel wrapping an existing socket. Used for newly created sockets

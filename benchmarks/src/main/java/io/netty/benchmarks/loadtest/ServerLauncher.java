@@ -34,6 +34,11 @@ final class ServerLauncher {
         command.add(System.getProperty("java.home") + "/bin/java");
 
         command.add("-XX:NativeMemoryTracking=summary");
+        command.add("--enable-native-access=ALL-UNNAMED");
+        command.add("--add-opens");
+        command.add("java.base/sun.nio.ch=ALL-UNNAMED");
+        command.add("--add-opens");
+        command.add("java.base/java.io=ALL-UNNAMED");
 
         final long warmupDelaySeconds = config.warmupTimeMs() / 1000;
         command.add("-XX:StartFlightRecording=delay=" + warmupDelaySeconds +

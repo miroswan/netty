@@ -63,7 +63,10 @@ public final class LoadTestOrchestrator {
                 " / " + env.cpuModel());
 
         final ScenarioRunner runner = new ScenarioRunner(buildDir, reportDir, serverClasspath);
-        final List<BenchmarkScenario> scenarios = BenchmarkScenario.defaultSuite();
+        final String scenarioFilter = System.getProperty("benchmark.scenario");
+        final List<BenchmarkScenario> allScenarios = BenchmarkScenario.defaultSuite();
+        final List<BenchmarkScenario> scenarios = scenarioFilter == null ? allScenarios :
+                allScenarios.stream().filter(s -> s.name().contains(scenarioFilter)).collect(Collectors.toList());
         final List<ScenarioResult> results = new ArrayList<>();
 
         for (final BenchmarkScenario scenario : scenarios) {
